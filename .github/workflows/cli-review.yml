@@ -23,37 +23,37 @@ jobs:
 
       - name: Get PR diff
         run: |
-          echo "Base ref: ${{ github.event.pull_request.base.ref }}"
           git fetch origin ${{ github.event.pull_request.base.ref }}
           git diff origin/${{ github.event.pull_request.base.ref }}...HEAD > /tmp/pr-diff.txt
-          echo "Diff size: $(wc -l < /tmp/pr-diff.txt) lines"
 
       - name: Run AI Review
-        id: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
         run: |
-          DIFF=$(cat /tmp/pr-diff.txt)
-          REVIEW=$(claude --print -p \
-            "请 review 以下 PR diff。PR 标题：${{ github.event.pull_request.title }}
-            仓库：${{ github.repository }}
+          cat > /tmp/prompt.txt << 'PROMPT_EOF'
+          请 review 以下 PR diff。
 
-            \`\`\`diff
-            $DIFF
-            \`\`\`
+          PR 标题：${{ github.event.pull_request.title }}
+          仓库：${{ github.repository }}
 
-            请按 .claude/commands/review.zh-Hans.md 的标准进行 review。" 2>&1) || REVIEW="AI review 执行失败，请检查 workflow 日志。"
+          ```diff
+          PROMPT_EOF
+          cat /tmp/pr-diff.txt >> /tmp/prompt.txt
+          cat >> /tmp/prompt.txt << 'PROMPT_EOF'
+          ```
 
-          echo "REVIEW_BODY<<EOF" >> $GITHUB_ENV
-          echo "$REVIEW" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          请按 .claude/commands/review.zh-Hans.md 的标准进行 review。
+          PROMPT_EOF
+
+          claude --print -p "$(cat /tmp/prompt.txt)" > /tmp/review-output.txt 2>&1
 
       - name: Post Comment
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          REVIEW=$(cat /tmp/review-output.txt)
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "## 🤖 AI Code Review
 
-          ${{ env.REVIEW_BODY }}"
+          $REVIEW"
