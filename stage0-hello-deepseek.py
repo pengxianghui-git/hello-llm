@@ -26,3 +26,4 @@ for block in msg.content:
         print(block.text)
     elif block.type == "thinking":
         print("Thinking:", block.thinking[:200], "...")
+# test comment
